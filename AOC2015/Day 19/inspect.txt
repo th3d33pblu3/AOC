@@ -1,0 +1,56 @@
+A => TF
+B => BC
+B => UB
+C => CC
+C => PB
+C => ST
+F => CF
+F => PM
+F => SA
+H => HC
+H => NT
+H => OB
+M => BF
+M => UM
+N => HS
+O => HP
+O => OU
+P => CP
+P => PU
+S => CS
+T => TC
+U => BP
+U => UU
+
+A => T!
+B => U!
+C => P!
+H => O!
+N => C!
+O => N!
+P => S!
+
+O => C@
+C => S@
+H => N@
+
+O => C&
+C => S&
+H => N&
+
+H => C#
+H => C$
+H => C*
+H => C^
+
+Notes:
+CHANGES = [('(F)', '!'), ('(M)', '@'), ('(A)', '#'), ('(FYM)', '$'), ('(MYF)', '%'), ('(FYF)', '^'), ('(FYFYF)', '&')]
+LIMIT_ROOTS = {"F", "M", "A", "FYM", "MYF", "FYF", "FYFYF"}
+
+Findings:
+* We can treat Rn Ar as ( ) since they always comes in a pair
+* The Y element can never be changed to other elements
+* The number of Y elements within the limits ( ) will determine the number of elements left in that root
+* If we see the limit of ( ) and the elements within it as a single element, we realize that every step essentially increase the number of elements by 1
+* We do not actually need to know how to reduce to the root, we just need to know the number of steps
+* The length of the molecules with the limits reduced to the above form has a 1 to 1 ratio to the number of steps required to reduce it
