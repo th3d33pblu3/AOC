@@ -47,6 +47,48 @@ def solve_part_1():
     return checksum
 
 def solve_part_2():
-    pass
+    files = []
+    empty = []
+    id_files = []
+    id_empty = []
+
+    data = list(map(int, read_input_file_data()))
     
-print(solve_part_1())
+    files = data[::2]
+    empty = data[1::2]
+    block_pos = [None] * len(data)
+
+    s = 0
+    for i in range(len(data)):
+        if i % 2 == 0:
+            file_size = files[i // 2]
+            block_pos[i] = s
+            s += file_size
+        else:
+            empty_size = empty[(i - 1) // 2]
+            block_pos[i] = s
+            s += empty_size
+
+    def get_file_checksum(file_id, file_size, pos):
+        return file_id * (pos + pos + file_size - 1) * file_size // 2
+    
+    checksum = 0
+    for i in range(len(files) - 1, -1, -1):
+        file_size = files[i]
+        for j in range(i):
+            empty_size = empty[j]
+            if empty_size >= file_size:
+                empty[j] = empty_size - file_size
+                pos = block_pos[j * 2 + 1]
+                block_pos[j * 2 + 1] = pos + file_size
+
+                # add checksum
+                checksum += get_file_checksum(i, file_size, pos)
+                break
+        else:
+            # did not move file
+            checksum += get_file_checksum(i, file_size, block_pos[i * 2])
+    
+    return checksum
+    
+print(solve_part_2())
