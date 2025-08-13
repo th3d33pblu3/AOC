@@ -153,29 +153,30 @@ def solve_part_1():
     # print(Module.high_count, Module.low_count)
     return Module.high_count * Module.low_count
 
+import math
+
 def solve_part_2():
     modules = parse_modules()
-    RX = 'rx'
+    ft_dependency = ['vz', 'bq', 'qh', 'lt']
+    frequencies = []
     presses = 0
-    flag = True
-    while flag:
-        print(presses)
+    while ft_dependency:
         signals: Queue[signal_command] = Queue()
         signals.put(BUTTON.press())
         presses += 1
         while not signals.empty():
             signal = signals.get()
             pulse, module_name = signal[1], signal[2]
-            if module_name == RX and pulse == LOW:
-                flag = False
-                print(f"FOUND!: {presses=}")
-                break
+            if module_name in ft_dependency and pulse == LOW:
+                frequencies.append(presses)
+                ft_dependency.remove(module_name)
             if module_name not in modules:
                 continue
             module = modules[module_name]
             new_signals = module.process_signal(signal)
             for signal in new_signals:
                 signals.put(signal)
-    return presses
+    
+    return math.lcm(*frequencies)
     
 print(solve_part_2())

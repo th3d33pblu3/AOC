@@ -2,7 +2,6 @@ from queue import Queue
 
 def read_input_file_data():
     FILE = "puzzle_input.txt"
-    FILE = "sample.txt"
     file = open(FILE, "r")
     data = file.read()
     file.close()
@@ -17,13 +16,12 @@ def parse_input():
     for y, line in enumerate(garden_map):
         for x, c in enumerate(line):
             if c == START:
-                line.replace(START, PLOT)
+                garden_map[y] = line.replace(START, PLOT)
                 return (y, x), len(garden_map), len(garden_map[0]), garden_map
     raise Exception("No starting position found.")
 
 def solve_part_1():
     starting_pos, y_size, x_size, garden_map = parse_input()
-
     D = [(0, 1),
          (1, 0),
          (0, -1),
@@ -51,12 +49,41 @@ def solve_part_1():
         visited_pos0 = new_frontier
     return len(visited_pos0)
 
+import math
 def solve_part_2():
     starting_pos, y_size, x_size, garden_map = parse_input()
-    D = [(1, 0),
-         (-1, 0),
-         (0, 1),
-         (0, -1)]
+    # To solve this question, we need the fact that the map has no rocks on the outer
+    # rim and in the center axis from where the start is.
+    # This way, to travel to another map, the shortest path is to travel along those
+    # axes and the steps required is the same.
+
+    # 1  2  3
+    # 4  5  6
+    # 7  8  9
+    TOP_LEFT  = (0, 0)                      # 1
+    TOP       = (0, starting_pos[1])        # 2
+    TOP_RIGHT = (0, x_size-1)               # 3
+    LEFT      = (starting_pos[0], 0)        # 4
+    CENTER    = starting_pos                # 5
+    RIGHT     = (starting_pos[0], x_size-1) # 6
+    BOT_LEFT  = (y_size-1, 0)               # 7
+    BOT       = (y_size-1, starting_pos[1]) # 8
+    BOT_RIGHT = (y_size-1, x_size-1)        # 9
+
+    MIN_DIST_POINTS = [
+        TOP_LEFT, TOP, TOP_RIGHT,
+        LEFT, CENTER, RIGHT,
+        BOT_LEFT, BOT, BOT_RIGHT
+    ]
+    D = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+    # Point shifting from START
+    assert (y_size - 1) // 2 == starting_pos[0] and (x_size - 1) // 2 == starting_pos[1]
+    HALF_SHIFT = (y_size + 1) // 2
+    # Point shifting across map grid
+    assert y_size == x_size
+    FULL_SHIFT = y_size
+
     def out_of_range(pos):
         y, x = pos
         return y < 0 or y >= y_size or x < 0 or x >= x_size
@@ -65,115 +92,99 @@ def solve_part_2():
         return garden_map[y % y_size][x % x_size] == PLOT
     def explore(pos) -> tuple[dict[tuple[int, int], int], dict[tuple[int, int], int]]:
         frontier = {pos}
-        pos_steps = {pos: 0}
-        exit_steps = {}
+        reachable_steps = {0: 1}
         steps_count = 0
-        while len(frontier) != 0:
+        save1, save2 = None, None # Due to odd and even
+        while frontier:
             steps_count += 1
             new_frontier = set()
             for y, x in frontier:
                 for dy, dx in D:
                     new_pos = (y+dy, x+dx)
-                    if is_plot(new_pos):
-                        if out_of_range(new_pos): # New position is a valid exit
-                            # assert new_pos not in exit_steps # DEBUG
-                            exit_steps[new_pos] = steps_count
-                        elif new_pos not in pos_steps: # Unexplored step
-                            pos_steps[new_pos] = steps_count
-                            new_frontier.add(new_pos)
+                    if is_plot(new_pos) and not out_of_range(new_pos):
+                        new_frontier.add(new_pos)
             frontier = new_frontier
-        return pos_steps, exit_steps
-    def correct_exit_pos(exit_pos):
-        y, x = exit_pos
-        return y % y_size, x % x_size
-    def get_new_map_pos(map_pos, exit_pos):
-        y, x = exit_pos
-        if y < 0:
-            return map_pos[0] - 1, map_pos[1]
-        elif y >= y_size:
-            return map_pos[0] + 1, map_pos[1]
-        elif x < 0:
-            return map_pos[0], map_pos[1] - 1
-        elif x >= x_size:
-            return map_pos[0], map_pos[1] + 1
-        else:
-            raise Exception(f"Unrecognized exit {exit_pos}")
+            if frontier == save1: # Last step already fully explores the map
+                return reachable_steps, steps_count-1 # max steps
+            else:
+                save1 = save2
+                save2 = frontier
+                reachable_steps[steps_count] = len(frontier)
     
-    # Primary initialization
+    ##################
+    # MAIN ALGORITHM #
+    ##################
     STEPS = 26501365
-    STEPS = 50
-    explored_pos_steps = {} # pos: pos_steps, exit_steps
-    pos_largest_steps = {}  # pos: largest_step_count (int)
+    pos_count = 0
 
-    pos_steps, exit_steps = explore(starting_pos)
-    explored_pos_steps[starting_pos] = (pos_steps, exit_steps)
-    pos_largest_steps[starting_pos] = max(pos_steps.values())
-    exits = exit_steps.keys()
-    for exit in exits:
-        exit_pos = (exit[0] % y_size, exit[1] % x_size)
-        explored_pos_steps[exit_pos] = explore(exit_pos)
-        pos_largest_steps[exit_pos] = max(explored_pos_steps[exit_pos][0].values())
+    # Initialization
+    step_pos_table = {} # point: reachable_steps, max_steps
+    for point in MIN_DIST_POINTS:
+        step_pos_table[point] = explore(point)
     
-    even_count, odd_count = 0, 0
-    for pos in pos_steps:
-        if (pos[0] + pos[1]) % 2 == 0:
-            even_count += 1
-        else:
-            odd_count += 1
-    # Secondary initialization
-    even_odd_pos_count = even_count, odd_count
-
-    # Algorithm
-    map_even_odd = {} # map_pos: (0: even, 1: odd)
-    explored_map = {} # (map_pos, pos): steps
-
-    pos_frontier = Queue()
-    pos_frontier.put(((0, 0), starting_pos, STEPS)) # map_pos, pos, steps
-    unfinished_frontier = Queue()
-    while not pos_frontier.empty():
-        map_pos, pos, steps = pos_frontier.get()
-
-        # Search trimming
-        if (map_pos, pos) in explored_map:
-            if explored_map[(map_pos, pos)] >= steps:
-                continue
-        explored_map[(map_pos, pos)] = steps
-
-        # Walk in map
-        if steps >= pos_largest_steps[pos]: # Can walk finish
-            map_even_odd[map_pos] = (pos[0] + pos[1] + steps) % 2
-        else: # Cannot walk finish
-            unfinished_frontier.put((map_pos, pos, steps))
-        
-        # Find exits and new positions
-        exit_steps = explored_pos_steps[pos][1]
-        for exit in exit_steps:
-            required_steps = exit_steps[exit]
-            if required_steps > steps:
-                continue
-            new_map_pos = get_new_map_pos(map_pos, exit)
-            pos_frontier.put((new_map_pos, correct_exit_pos(exit), steps - required_steps))
-
-    map_positions: dict[tuple[int, int], set] = {}
-    while not unfinished_frontier.empty():
-        map_pos, pos, steps = unfinished_frontier.get()
-        if map_pos in map_even_odd: # If already walked finish by some exploration
+    # Center (5)
+    point = CENTER
+    remaining_steps = STEPS
+    reachable_steps, max_steps = step_pos_table[point]
+    if remaining_steps >= max_steps:
+        pos_count += reachable_steps[max_steps - ((remaining_steps % 2) ^ (max_steps % 2))]
+    else:
+        pos_count += reachable_steps[remaining_steps]
+    
+    # Straight line (2, 4, 6, 8)
+    for point in [TOP, LEFT, RIGHT, BOT]:
+        remaining_steps = STEPS - HALF_SHIFT
+        reachable_steps, max_steps = step_pos_table[point]
+        # Complete scans
+        n = (remaining_steps - max_steps) // FULL_SHIFT
+        if n < 0:
             continue
-        if map_pos not in map_positions:
-            map_positions[map_pos] = set()
-        pos_steps = explored_pos_steps[pos][0]
-
-        to_update = set(filter(lambda p: pos_steps[p] <= steps and (pos_steps[p] % 2) == (steps % 2), pos_steps))
-        map_positions[map_pos].update(to_update)
-
-    sum_pos = 0
-    for map_pos in map_even_odd:
-        sum_pos += even_odd_pos_count[map_even_odd[map_pos]]
-    for map_pos in map_positions:
-        map_type = (map_pos[0] + map_pos[1]) % 2
-        for pos in map_positions[map_pos]:
-            assert (pos[0] + pos[1]) % 2 == map_type
-        sum_pos += len(map_positions[map_pos])
-    return sum_pos
+        if FULL_SHIFT % 2 == 0:
+            pos_count += n * reachable_steps[max_steps - ((remaining_steps % 2) ^ (max_steps % 2))]
+        else:
+            pos_count += (
+                math.ceil(n / 2) * reachable_steps[max_steps - ((remaining_steps % 2) ^ (max_steps % 2))] +
+                math.floor(n / 2) * reachable_steps[max_steps - (((remaining_steps - FULL_SHIFT) % 2) ^ (max_steps % 2))]
+            )
+        # Remaining scans
+        remaining_steps -= n * FULL_SHIFT
+        while remaining_steps > 0:
+            if remaining_steps >= max_steps:
+                pos_count += reachable_steps[max_steps - ((remaining_steps % 2) ^ (max_steps % 2))]
+            else:
+                pos_count += reachable_steps[remaining_steps]
+            remaining_steps -= FULL_SHIFT
     
-print(solve_part_1())
+    # Diagonals (1, 3, 7, 9)
+    for point in [TOP_LEFT, TOP_RIGHT, BOT_LEFT, BOT_RIGHT]:
+        remaining_steps = STEPS - HALF_SHIFT - HALF_SHIFT
+        reachable_steps, max_steps = step_pos_table[point]
+        # Complete scans
+        n = (remaining_steps - max_steps) // FULL_SHIFT
+        if n < 0:
+            continue
+        if FULL_SHIFT % 2 == 0:
+            summation_to_n = (n + 1) * n / 2
+            pos_count += summation_to_n * reachable_steps[max_steps - ((remaining_steps % 2) ^ (max_steps % 2))]
+        else:
+            odd_max, even_max = (n-1, n) if n % 2 == 0 else (n, n-1)
+            odd_summation = int((odd_max + 1) / 2 * (((odd_max - 1) / 2) + 1))
+            even_summation = int((even_max + 2) / 2 * (((even_max - 2) / 2) + 1))
+            pos_count += (
+                odd_summation * reachable_steps[max_steps - ((remaining_steps % 2) ^ (max_steps % 2))] +
+                even_summation * reachable_steps[max_steps - (((remaining_steps - FULL_SHIFT) % 2) ^ (max_steps % 2))]
+            )
+        # Remaining scans
+        remaining_steps -= n * FULL_SHIFT
+        count = n + 1
+        while remaining_steps > 0:
+            if remaining_steps >= max_steps:
+                pos_count += count * reachable_steps[max_steps - ((remaining_steps % 2) ^ (max_steps % 2))]
+            else:
+                pos_count += count * reachable_steps[remaining_steps]
+            remaining_steps -= FULL_SHIFT
+            count += 1
+    
+    return pos_count
+    
+print(solve_part_2())
